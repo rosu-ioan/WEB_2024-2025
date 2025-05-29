@@ -1,0 +1,9 @@
+{
+    "require": {
+        "google/apiclient": "^2.18",
+        "thenetworg/oauth2-azure": "^2.2",
+        "guzzlehttp/guzzle": "^7.9",
+        "stevenmaguire/oauth2-dropbox": "^3.1",
+        "vlucas/phpdotenv": "^5.6"
+    }
+}
