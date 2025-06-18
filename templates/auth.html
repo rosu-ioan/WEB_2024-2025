@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="{{base_url}}">
+    <title>{{page_title}}</title>
+    
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>nor.ust</h1>
+                <p>You universal storage tool</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button type="button" class="tab-btn active" data-tab="login">
+                    Sign In
+                </button>
+                <button type="button" class="tab-btn" data-tab="register">
+                    Sign Up
+                </button>
+            </div>
+
+            <div class="auth-alerts" id="alerts"></div>
+
+            <div class="auth-form-container active" id="login-form">
+                <form class="auth-form" id="loginForm" novalidate>
+                    <div class="form-group">
+                        <label for="login-email" class="form-label">Email</label>
+                        <input 
+                            type="email" 
+                            id="login-email" 
+                            name="email" 
+                            class="form-input" 
+                            required 
+                            autocomplete="email"
+                            placeholder="Enter your email address"
+                        >
+                        <div class="error-message" id="login-email-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="login-password" class="form-label">Password</label>
+                        <input 
+                            type="password" 
+                            id="login-password" 
+                            name="password" 
+                            class="form-input" 
+                            required 
+                            autocomplete="current-password"
+                            placeholder="Enter your password"
+                        >
+                        <div class="error-message" id="login-password-error"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Sign In
+                    </button>
+                </form>
+            </div>
+
+            <div class="auth-form-container" id="register-form">
+                <form class="auth-form" id="registerForm" novalidate>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="register-username" class="form-label">Username</label>
+                                <input 
+                                    type="text" 
+                                    id="register-username" 
+                                    name="username" 
+                                    class="form-input" 
+                                    required 
+                                    autocomplete="username"
+                                    placeholder="Choose a username"
+                                >
+                                <div class="error-message" id="register-username-error"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="register-email" class="form-label">Email</label>
+                                <input 
+                                    type="email" 
+                                    id="register-email" 
+                                    name="email" 
+                                    class="form-input" 
+                                    required 
+                                    autocomplete="email"
+                                    placeholder="Enter your email"
+                                >
+                                <div class="error-message" id="register-email-error"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-password" class="form-label">Password</label>
+                        <input 
+                            type="password" 
+                            id="register-password" 
+                            name="password" 
+                            class="form-input" 
+                            required 
+                            autocomplete="new-password"
+                            placeholder="Create a strong password"
+                        >
+                        <div class="error-message" id="register-password-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="register-confirm" class="form-label">Confirm Password</label>
+                        <input 
+                            type="password" 
+                            id="register-confirm" 
+                            name="confirm_password" 
+                            class="form-input" 
+                            required 
+                            autocomplete="new-password"
+                            placeholder="Confirm your password"
+                        >
+                        <div class="error-message" id="register-confirm-error"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Create Account
+                    </button>
+                </form>
+            </div>  
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>
