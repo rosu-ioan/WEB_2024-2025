@@ -1,0 +1,16 @@
+RewriteEngine On
+RewriteRule ^(controllers|models|views|utils|credentials)/ - [F,L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+
+php_value memory_limit 10G
+php_value upload_max_filesize 10G
+php_value post_max_size 10G
+php_value max_execution_time 0
+
+LimitRequestBody 0
+
+php_flag extension=zip On
