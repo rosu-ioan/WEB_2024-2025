@@ -1,20 +1,8 @@
 <?php
+
 require_once 'autoload.php';
 
-
-$envPath = dirname(__DIR__) . "/credentials/.env";
-
-if (file_exists($envPath)) {
-    foreach (file($envPath) as $line) {
-        if (str_starts_with(trim($line), '#') || !str_contains($line, '=')) continue;
-
-        [$key, $value] = explode('=', $line, 2);
-        $key = trim($key);
-        $value = trim($value, " \t\n\r\0\x0B\"'");
-
-        $_ENV[$key] = $value;
-    }
-}
+use Dotenv\Dotenv;
 
 class MicrosoftOneDriveProvider implements CloudProviderInterface 
 {
@@ -24,14 +12,23 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
     private $accessToken;
     private $tenant = 'common';
     private $apiBaseUrl = 'https://graph.microsoft.com/v1.0';
-    private $scope = 'offline_access Files.Read Files.Read.All Files.ReadWrite Files.ReadWrite.All User.Read';
+    private $scope = 'offline_access Files.Read Files.Read.All Files.ReadWrite Files.ReadWrite.All User.Read User.Read.All Sites.Read.All';
     
     public function __construct() 
     {
-       
+        $dotenv = Dotenv::createImmutable(__DIR__ . '/../credentials');
+        $dotenv->load();
+        
         $this->clientId = $_ENV['AZURE_CLIENT_ID'];
         $this->clientSecret = $_ENV['AZURE_CLIENT_SECRET'];
-        $this->redirectUri = 'http://localhost/WEB_2024-2025/microsoftonedrive/login';
+        $this->redirectUri = 'http://localhost/WEB_2024-2025/profile/oauth-callback';
+        
+        error_log("Microsoft Client ID: " . ($this->clientId ?? 'NULL'));
+        error_log("Microsoft Client Secret: " . (isset($this->clientSecret) ? 'SET' : 'NULL'));
+        
+        if (!$this->clientId || !$this->clientSecret) {
+            throw new Exception('Microsoft Azure credentials not found in .env file');
+        }
     }
     
     public function getAuthorizationUrl(): string 
@@ -41,42 +38,106 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
             'response_type' => 'code',
             'redirect_uri' => $this->redirectUri,
             'scope' => $this->scope,
-            'response_mode' => 'query'
+            'response_mode' => 'query',
+            'prompt' => 'consent' 
+
         ];
         
         return 'https://login.microsoftonline.com/' . $this->tenant . '/oauth2/v2.0/authorize?' . 
                http_build_query($params);
     }
-    
+
     public function handleAuthCallback(string $authCode): array 
     {
-        $params = [
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'code' => $authCode,
-            'redirect_uri' => $this->redirectUri,
-            'grant_type' => 'authorization_code'
-        ];
+        error_log("=== MICROSOFT ONEDRIVE handleAuthCallback START ===");
+        error_log("Auth code received: " . substr($authCode, 0, 20) . "...");
         
-        $ch = curl_init('https://login.microsoftonline.com/' . $this->tenant . '/oauth2/v2.0/token');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        
-        $response = curl_exec($ch);
-        $error = curl_error($ch);
-        curl_close($ch);
-        
-        if ($error) {
-            throw new Exception('Token request failed: ' . $error);
+        try {
+            $params = [
+                'client_id' => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'code' => $authCode,
+                'redirect_uri' => $this->redirectUri,
+                'grant_type' => 'authorization_code'
+            ];
+            
+            $ch = curl_init('https://login.microsoftonline.com/' . $this->tenant . '/oauth2/v2.0/token');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/x-www-form-urlencoded',
+                'Accept: application/json'
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+            
+            if ($error) {
+                error_log("cURL error: $error");
+                throw new Exception('Token request failed: ' . $error);
+            }
+            
+            if ($httpCode !== 200) {
+                error_log("HTTP error: $httpCode, Response: $response");
+                throw new Exception("Token request failed with HTTP $httpCode: $response");
+            }
+            
+            $token = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log("JSON decode error: " . json_last_error_msg());
+                throw new Exception('Invalid JSON response from Microsoft: ' . json_last_error_msg());
+            }
+            
+            error_log("Raw token response from Microsoft: " . print_r($token, true));
+            
+            if (!isset($token['access_token'])) {
+                error_log("No access_token in response");
+                throw new Exception('Invalid token response: ' . $response);
+            }
+            
+            $normalizedToken = [
+                'access_token' => $token['access_token'],
+                'token_type' => $token['token_type'] ?? 'Bearer',
+                'refresh_token' => $token['refresh_token'] ?? null,
+                'scope' => $token['scope'] ?? $this->scope
+            ];
+            
+            if (isset($token['expires_in'])) {
+                $expiresIn = (int)$token['expires_in'];
+                error_log("Microsoft expires_in: $expiresIn seconds");
+              
+                if ($expiresIn > 0 && $expiresIn <= 86400) { 
+                    $normalizedToken['expires_in'] = $expiresIn;
+                } else {
+                    error_log("WARNING: Invalid expires_in from Microsoft ($expiresIn), using default 3600");
+                    $normalizedToken['expires_in'] = 3600; 
+                }
+            } else {
+                error_log("WARNING: No expires_in from Microsoft, using default 3600");
+                $normalizedToken['expires_in'] = 3600; 
+            }
+            
+            if (isset($token['user_id'])) {
+                $normalizedToken['account_id'] = $token['user_id'];
+            }
+            
+            if (isset($token['ext_expires_in'])) {
+                $normalizedToken['ext_expires_in'] = $token['ext_expires_in'];
+            }
+            
+            error_log("Normalized Microsoft token: " . print_r($normalizedToken, true));
+            error_log("=== MICROSOFT ONEDRIVE handleAuthCallback SUCCESS ===");
+            
+            return $normalizedToken;
+            
+        } catch (Exception $e) {
+            error_log("=== MICROSOFT ONEDRIVE handleAuthCallback ERROR ===");
+            error_log("Exception: " . $e->getMessage());
+            throw $e;
         }
-        
-        $token = json_decode($response, true);
-        if (!isset($token['access_token'])) {
-            throw new Exception('Invalid token response: ' . $response);
-        }
-        
-        return $token;
     }
     
     public function refreshAccessToken(string $refreshToken): array 
@@ -135,12 +196,11 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
         }
         
        
-        if ($fileSize < 4 * 1024 * 1024) {
+        if ($fileSize < 60 * 1024 * 1024) {
             return $this->simpleUpload($fileName, $filePath, $progressCallback);
         }
         
-       
-        return $this->resumableUpload($fileName, $filePath, $progressCallback);
+        return $this->complexUpload($fileName, $filePath, $progressCallback);
     }
     
     private function simpleUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
@@ -161,121 +221,215 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
         ];
     }
     
-    private function resumableUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
+    private function complexUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
     {
-       
-        $response = $this->makeApiRequest(
-            "/me/drive/root:/". rawurlencode($fileName) .":/createUploadSession",
-            'POST'
-        );
-        
-        if (!isset($response['uploadUrl'])) {
-            throw new Exception('Failed to create upload session');
+        $token = $this->accessToken;
+
+        $url = "https://graph.microsoft.com/v1.0/me/drive/root:/". rawurlencode($fileName) .":/createUploadSession";
+        $data = json_encode([
+            "item" => [
+                "@microsoft.graph.conflictBehavior" => "rename",
+                "description" => "Upload via resumableUpload()",
+                "name" => $fileName
+            ]
+        ]);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $data,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token",
+                "Content-Type: application/json",
+                "Cache-Control: no-cache",
+                "Pragma: no-cache"
+            ],
+
+            CURLOPT_TIMEOUT => 300 
+        ]);
+
+        $result = json_decode(curl_exec($ch), true);
+        curl_close($ch);
+
+        if (!isset($result['uploadUrl'])) {
+            throw new Exception('Upload session creation failed: ' . json_encode($result));
         }
-        
-        $uploadUrl = $response['uploadUrl'];
+
+        $uploadUrl = $result['uploadUrl'];
         $fileSize = filesize($filePath);
-        $chunkSize = 320 * 1024;
-        
-        $fp = fopen($filePath, 'rb');
+        $chunkSize = 60*1024 * 1024;
+        $numChunks = ceil($fileSize / $chunkSize);
         $uploaded = 0;
-        
-        while (!feof($fp)) {
-            $chunk = fread($fp, $chunkSize);
-            $chunkLength = strlen($chunk);
-            
-            $start = $uploaded;
-            $end = $uploaded + $chunkLength - 1;
-            
-            $ch = curl_init($uploadUrl);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $chunk);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                "Content-Length: $chunkLength",
+
+        $fp = fopen($filePath, 'rb');
+        if (!$fp) {
+            throw new Exception("Could not open file for reading: $filePath");
+        }
+
+        for ($i = 0; $i < $numChunks; $i++) {
+            $start = $i * $chunkSize;
+            $end = min($start + $chunkSize, $fileSize) - 1;
+            $length = $end - $start + 1;
+
+            fseek($fp, $start);
+            $chunk = fread($fp, $length);
+
+            $headers = [
+                "Content-Length: $length",
                 "Content-Range: bytes $start-$end/$fileSize"
+            ];
+
+            $ch = curl_init($uploadUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => "PUT",
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_POSTFIELDS => $chunk,
+                
+                CURLOPT_TIMEOUT => 300
             ]);
-            
+
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            
+
             if ($httpCode >= 400) {
-                throw new Exception("Upload failed with code $httpCode: $response");
+                fclose($fp);
+                throw new Exception("Chunk upload failed: HTTP $httpCode - $response");
             }
-            
-            $uploaded += $chunkLength;
-            
+
+            $uploaded += $length;
+
             if ($progressCallback) {
                 $progressCallback([
-                    'progress_percentage' => ($uploaded / $fileSize) * 100,
+                    'progress_percentage' => round(($uploaded / $fileSize) * 100, 2),
                     'uploaded_bytes' => $uploaded,
                     'total_bytes' => $fileSize,
-                    'status' => $uploaded >= $fileSize ? 'completed' : 'uploading'
+                    'status' => ($uploaded >= $fileSize) ? 'completed' : 'uploading'
                 ]);
             }
-            
-            if ($httpCode === 201 || $httpCode === 200) {
-                $result = json_decode($response, true);
+
+            if (in_array($httpCode, [200, 201])) {
+                $finalResult = json_decode($response, true);
+                fclose($fp);
                 return [
-                    'id' => $result['id'],
-                    'name' => $result['name'],
-                    'size' => $result['size'],
-                    'mime_type' => $result['file']['mimeType'] ?? 'application/octet-stream'
+                    'id' => $finalResult['id'] ?? null,
+                    'name' => $finalResult['name'] ?? $fileName,
+                    'size' => $finalResult['size'] ?? $fileSize,
+                    'mime_type' => $finalResult['file']['mimeType'] ?? 'application/octet-stream'
                 ];
             }
         }
-        
+
         fclose($fp);
-        throw new Exception('Upload failed to complete');
+        throw new Exception('Upload completed but no final metadata received.');
     }
     
     public function downloadFile(string $fileId, string $savePath = null, callable $progressCallback = null): string 
     {
-        $fileInfo = $this->getFileInfo($fileId);
-        $downloadUrl = $this->makeApiRequest("/me/drive/items/$fileId/content", 'GET', null, [], true);
+        error_log("=== MICROSOFT ONEDRIVE DOWNLOAD START ===");
+        error_log("File ID: $fileId");
         
-        if ($savePath === null) {
-            $savePath = sys_get_temp_dir() . '/download_' . $fileId . '_' . $fileInfo['name'];
-        }
-        
-        $fp = fopen($savePath, 'wb');
-        if (!$fp) {
-            throw new Exception("Could not open file for writing: $savePath");
-        }
-        
-        $ch = curl_init($downloadUrl);
-        curl_setopt($ch, CURLOPT_FILE, $fp);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_NOPROGRESS, false);
-        curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($ch, $downloadTotal, $downloaded) use ($progressCallback) {
-            if ($progressCallback && $downloadTotal > 0) {
-                $progressCallback([
-                    'progress_percentage' => ($downloaded / $downloadTotal) * 100,
-                    'downloaded_bytes' => $downloaded,
-                    'total_bytes' => $downloadTotal,
-                    'status' => $downloaded >= $downloadTotal ? 'completed' : 'downloading'
-                ]);
+        try {
+            $fileInfo = $this->getFileInfo($fileId);
+            error_log("File info retrieved: " . print_r($fileInfo, true));
+            
+            if ($savePath === null) {
+                $safeFileName = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $fileInfo['name']);
+                $savePath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . 
+                        DIRECTORY_SEPARATOR . 
+                        'download_' . 
+                        preg_replace('/[^a-zA-Z0-9_-]/', '', $fileId) . '_' . 
+                        $safeFileName;
             }
-        });
-        
-        $success = curl_exec($ch);
-        curl_close($ch);
-        fclose($fp);
-        
-        if (!$success) {
-            throw new Exception('Download failed');
+
+            $fp = fopen($savePath, 'wb');
+            if (!$fp) {
+                throw new Exception("Could not open file for writing: $savePath");
+            }
+
+            error_log("Starting direct download from Graph API...");
+
+            $headers = [
+                'Authorization: Bearer ' . $this->accessToken,
+                'User-Agent: PHP-OneDrive-Client/1.0'
+            ];
+
+            $ch = curl_init();
+            $curlOptions = [
+                CURLOPT_URL => $this->apiBaseUrl . "/me/drive/items/$fileId/content",
+                CURLOPT_FILE => $fp,
+                CURLOPT_FOLLOWLOCATION => true, 
+                CURLOPT_NOPROGRESS => true,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_MAXREDIRS => 5, 
+                CURLOPT_TIMEOUT => 300 
+            ];
+
+            curl_setopt_array($ch, $curlOptions);
+
+            $success = curl_exec($ch);
+            $error = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $downloadedBytes = curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
+            $effectiveUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+            
+            curl_close($ch);
+            fclose($fp);
+
+            error_log("Download complete - Success: " . ($success ? 'YES' : 'NO'));
+            error_log("HTTP Code: $httpCode");
+            error_log("Downloaded bytes: $downloadedBytes");
+            error_log("Effective URL: $effectiveUrl");
+
+            if (!$success || $httpCode >= 400) {
+                if (file_exists($savePath)) {
+                    unlink($savePath);
+                }
+                throw new Exception('Download failed: ' . ($error ?: "HTTP $httpCode"));
+            }
+
+            $actualSize = filesize($savePath);
+            error_log("Final file size: $actualSize bytes");
+
+            if ($actualSize === 0) {
+                unlink($savePath);
+                throw new Exception('Download failed: File is empty');
+            }
+
+            error_log("=== MICROSOFT ONEDRIVE DOWNLOAD SUCCESS ===");
+            return $savePath;
+
+        } catch (Exception $e) {
+            error_log("=== MICROSOFT ONEDRIVE DOWNLOAD ERROR ===");
+            error_log("Exception: " . $e->getMessage());
+            
+            if (isset($fp) && is_resource($fp)) {
+                fclose($fp);
+            }
+            if (isset($savePath) && file_exists($savePath)) {
+                unlink($savePath);
+            }
+            throw $e;
         }
-        
-        return $savePath;
     }
-    
+
     public function deleteFile(string $fileId): bool 
     {
         try {
-            $this->makeApiRequest("/me/drive/items/$fileId", 'DELETE');
+            $this->ensureAuthenticated();
+
+            $this->makeApiRequest(
+                "/me/drive/items/{$fileId}",
+                'DELETE'
+            );
+
             return true;
+
         } catch (Exception $e) {
+            error_log("Delete file error: " . $e->getMessage());
             return false;
         }
     }
@@ -294,19 +448,21 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
         ];
     }
 
-    public function getAllFiles(int $limit)
+    public function getAllFiles(int $limit): array
     {
-        $files = [];
-        $endpoint = "/me/drive/root/children";
-        $params = [
-            '$top' => $limit,
-            '$select' => 'id,name,size,file,createdDateTime,lastModifiedDateTime,parentReference',
-            '$orderby' => 'name'
-        ];
-
-        $nextLink = $endpoint . '?' . http_build_query($params);
+        $this->ensureAuthenticated();
 
         try {
+            $files = [];
+            $endpoint = "/me/drive/root/children";
+            $params = [
+                '$top' => min($limit, 999),
+                '$select' => 'id,name,size,file,mimeType,createdDateTime,lastModifiedDateTime,webUrl,parentReference',
+                '$orderby' => 'lastModifiedDateTime desc'
+            ];
+
+            $nextLink = $endpoint . '?' . http_build_query($params);
+
             do {
                 $response = $this->makeApiRequest($nextLink);
                 
@@ -315,7 +471,6 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
                 }
 
                 foreach ($response['value'] as $file) {
-                   
                     if (!isset($file['file'])) {
                         continue;
                     }
@@ -327,6 +482,7 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
                         'mimeType' => $file['file']['mimeType'] ?? 'application/octet-stream',
                         'createdTime' => $file['createdDateTime'],
                         'modifiedTime' => $file['lastModifiedDateTime'],
+                        'webViewLink' => $file['webUrl'] ?? null,
                         'parents' => isset($file['parentReference']['id']) ? [$file['parentReference']['id']] : []
                     ];
 
@@ -335,15 +491,12 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
                     }
                 }
 
-               
                 if (isset($response['@odata.nextLink'])) {
-                   
                     $urlParts = parse_url($response['@odata.nextLink']);
                     $nextLink = $urlParts['path'];
                     if (isset($urlParts['query'])) {
                         $nextLink .= '?' . $urlParts['query'];
                     }
-                   
                     $nextLink = str_replace($this->apiBaseUrl, '', $nextLink);
                 } else {
                     $nextLink = null;
@@ -355,7 +508,7 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
 
         } catch (Exception $e) {
             error_log('Error in getAllFiles: ' . $e->getMessage());
-            throw new Exception('Failed to retrieve files: ' . $e->getMessage());
+            throw new Exception('Failed to get all files: ' . $e->getMessage());
         }
     }
     
@@ -409,9 +562,13 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
         
         $finalHeaders = array_merge($defaultHeaders, $headers);
         
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $finalHeaders);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_HTTPHEADER => $finalHeaders,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false
+        ]);
         
         if ($data) {
             if ($method !== 'PUT') {
@@ -427,14 +584,10 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         
-        if ($returnHeaders) {
-            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-            $headers = substr($response, 0, $headerSize);
-            
-           
-            if (preg_match('/Location: (.+)/', $headers, $matches)) {
-                return trim($matches[1]);
-            }
+        if (curl_errno($ch)) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            throw new Exception("cURL error: $error");
         }
         
         curl_close($ch);
@@ -443,14 +596,39 @@ class MicrosoftOneDriveProvider implements CloudProviderInterface
             throw new Exception("API request failed with code $httpCode: $response");
         }
         
+        if ($returnHeaders) {
+            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            $headers = substr($response, 0, $headerSize);
+            if (preg_match('/Location: (.+)/', $headers, $matches)) {
+                return trim($matches[1]);
+            }
+        }
+        
         if ($method === 'DELETE') {
             return true;
         }
         
         if ($response && !$returnHeaders) {
-            return json_decode($response, true);
+            $decoded = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception('Failed to decode API response: ' . json_last_error_msg());
+            }
+            return $decoded;
         }
         
         return $response;
+    }
+
+    private function ensureAuthenticated(): void 
+    {
+        if (!$this->accessToken) {
+            throw new Exception('Provider not authenticated. Call setAccessToken() first.');
+        }
+
+        try {
+            $this->makeApiRequest('/me/drive');
+        } catch (Exception $e) {
+            throw new Exception('Access token has expired or is invalid. Please refresh the token.');
+        }
     }
 }

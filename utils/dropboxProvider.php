@@ -1,17 +1,8 @@
 <?php
+
 require_once 'autoload.php';
 
-$envPath = dirname(__DIR__) . "/credentials/.env";
-
-if (file_exists($envPath)) {
-    foreach (file($envPath) as $line) {
-        if (str_starts_with(trim($line), '#') || !str_contains($line, '=')) continue;
-        [$key, $value] = explode('=', $line, 2);
-        $key = trim($key);
-        $value = trim($value, " \t\n\r\0\x0B\"'");
-        $_ENV[$key] = $value;
-    }
-}
+use Dotenv\Dotenv;
 
 class DropboxProvider implements CloudProviderInterface 
 {
@@ -24,9 +15,19 @@ class DropboxProvider implements CloudProviderInterface
     
     public function __construct() 
     {
-        $this->clientId = $_ENV['DROPBOX_CLIENT_ID'];
-        $this->clientSecret = $_ENV['DROPBOX_CLIENT_SECRET'];
-        $this->redirectUri = 'http://localhost/WEB_2024-2025/dropbox/login';
+        $dotenv = Dotenv::createImmutable(__DIR__ . '/../credentials');
+        $dotenv->load();
+        
+        $this->clientId = $_ENV['DROPBOX_APP_KEY'];
+        $this->clientSecret = $_ENV['DROPBOX_APP_SECRET'];
+        $this->redirectUri = 'http://localhost/WEB_2024-2025/profile/oauth-callback';
+        
+        error_log("Dropbox Client ID: " . ($this->clientId ?? 'NULL'));
+        error_log("Dropbox Client Secret: " . (isset($this->clientSecret) ? 'SET' : 'NULL'));
+        
+        if (!$this->clientId || !$this->clientSecret) {
+            throw new Exception('Dropbox credentials not found in .env file');
+        }
     }
     
     public function getAuthorizationUrl(): string 
@@ -35,7 +36,8 @@ class DropboxProvider implements CloudProviderInterface
             'client_id' => $this->clientId,
             'response_type' => 'code',
             'redirect_uri' => $this->redirectUri,
-            'token_access_type' => 'offline'
+            'token_access_type' => 'offline',
+            'scope' => 'files.metadata.read files.content.read files.content.write account_info.read'
         ];
         
         return 'https://www.dropbox.com/oauth2/authorize?' . http_build_query($params);
@@ -43,13 +45,17 @@ class DropboxProvider implements CloudProviderInterface
     
     public function handleAuthCallback(string $authCode): array 
     {
+        error_log("=== DROPBOX handleAuthCallback START ===");
+        error_log("Auth code received: " . $authCode);
+
         $params = [
-            'code' => $authCode,
-            'grant_type' => 'authorization_code',
-            'client_id' => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'redirect_uri' => $this->redirectUri
-        ];
+        'code' => $authCode,
+        'grant_type' => 'authorization_code',
+        'client_id' => $this->clientId,
+        'client_secret' => $this->clientSecret,
+        'redirect_uri' => $this->redirectUri,
+        'scope' => 'files.metadata.read files.content.read files.content.write account_info.read'
+    ];
         
         $ch = curl_init('https://api.dropboxapi.com/oauth2/token');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -65,10 +71,17 @@ class DropboxProvider implements CloudProviderInterface
         }
         
         $token = json_decode($response, true);
+
+        error_log("Raw token response from Dropbox: " . print_r($token, true));
+
         if (!isset($token['access_token'])) {
             throw new Exception('Invalid token response: ' . $response);
+        } else {
+            $expiresIn = (int)$token['expires_in'];
+            error_log("Dropbox expires_in: $expiresIn seconds");
         }
-        
+
+        error_log("=== DROPBOX handleAuthCallback SUCCESS ===");
         return $token;
     }
     
@@ -121,199 +134,295 @@ class DropboxProvider implements CloudProviderInterface
         if (!file_exists($filePath)) {
             throw new Exception("File not found: $filePath");
         }
-        
+
         $fileSize = filesize($filePath);
         if ($fileSize === false) {
             throw new Exception("Could not determine file size");
         }
-        
-        if ($fileSize <= 150 * 1024 * 1024) {
+
+        if ($fileSize < 60 * 1024 * 1024) {
             return $this->simpleUpload($fileName, $filePath, $progressCallback);
         }
-        
-        return $this->chunkedUpload($fileName, $filePath, $progressCallback);
+
+        return $this->complexUpload($fileName, $filePath, $progressCallback);
     }
     
-    private function simpleUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
+    public function simpleUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
     {
-        $content = file_get_contents($filePath);
-        $args = json_encode([
-            "path" => "/" . $fileName,
-            "mode" => "add",
-            "autorename" => true,
-            "mute" => false
-        ]);
-        
-        $ch = curl_init($this->contentUrl . '/files/upload');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $content);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Authorization: Bearer " . $this->accessToken,
-            "Dropbox-API-Arg: " . $args,
-            "Content-Type: application/octet-stream"
-        ]);
-        
-        $response = curl_exec($ch);
-        curl_close($ch);
-        
-        $result = json_decode($response, true);
-        if (!isset($result['id'])) {
-            throw new Exception('Upload failed: ' . $response);
+        if (!file_exists($filePath)) {
+            throw new Exception("File not found: $filePath");
         }
-        
-        return [
-            'id' => $result['id'],
-            'name' => $result['name'],
-            'size' => $result['size'],
-            'mime_type' => $result['.tag']
-        ];
-    }
-    
-    private function chunkedUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
-    {
-        $file = fopen($filePath, 'rb');
+
         $fileSize = filesize($filePath);
-        $chunkSize = 4 * 1024 * 1024;
-        $offset = 0;
-        $sessionId = null;
-        
-        while (!feof($file)) {
-            $chunk = fread($file, $chunkSize);
-            $chunkSize = strlen($chunk);
-            
-            if ($offset === 0) {
-               
-                $ch = curl_init($this->contentUrl . '/files/upload_session/start');
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $chunk);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    "Authorization: Bearer " . $this->accessToken,
-                    "Dropbox-API-Arg: {\"close\": false}",
-                    "Content-Type: application/octet-stream"
-                ]);
-                
-                $response = curl_exec($ch);
-                curl_close($ch);
-                
-                $result = json_decode($response, true);
-                $sessionId = $result['session_id'];
-            } else {
-               
-                $args = json_encode([
-                    "cursor" => [
-                        "session_id" => $sessionId,
-                        "offset" => $offset
-                    ],
-                    "close" => ($offset + $chunkSize >= $fileSize)
-                ]);
-                
-                $ch = curl_init($this->contentUrl . '/files/upload_session/append_v2');
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $chunk);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    "Authorization: Bearer " . $this->accessToken,
-                    "Dropbox-API-Arg: " . $args,
-                    "Content-Type: application/octet-stream"
-                ]);
-                
-                curl_exec($ch);
-                curl_close($ch);
-            }
-            
-            $offset += $chunkSize;
-            
-            if ($progressCallback) {
-                $progressCallback([
-                    'progress_percentage' => ($offset / $fileSize) * 100,
-                    'uploaded_bytes' => $offset,
-                    'total_bytes' => $fileSize,
-                    'status' => $offset >= $fileSize ? 'completed' : 'uploading'
-                ]);
-            }
+        if ($fileSize === false) {
+            throw new Exception("Could not determine file size");
         }
-        
-        fclose($file);
-        
-       
-        $args = json_encode([
-            "cursor" => [
-                "session_id" => $sessionId,
-                "offset" => $offset
-            ],
-            "commit" => [
-                "path" => "/" . $fileName,
+
+            $fileHandle = fopen($filePath, 'rb');
+            if (!$fileHandle) {
+                throw new Exception("Could not open file for reading");
+            }
+
+            $args = json_encode([
+                "path" => $fileName,
                 "mode" => "add",
                 "autorename" => true,
                 "mute" => false
-            ]
-        ]);
-        
-        $ch = curl_init($this->contentUrl . '/files/upload_session/finish');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, "");
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Authorization: Bearer " . $this->accessToken,
-            "Dropbox-API-Arg: " . $args,
-            "Content-Type: application/octet-stream"
-        ]);
-        
-        $response = curl_exec($ch);
-        curl_close($ch);
-        
-        $result = json_decode($response, true);
-        return [
-            'id' => $result['id'],
-            'name' => $result['name'],
-            'size' => $result['size'],
-            'mime_type' => $result['.tag']
-        ];
+            ]);
+
+            $ch = curl_init('https://content.dropboxapi.com/2/files/upload');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_INFILE => $fileHandle,
+                CURLOPT_INFILESIZE => $fileSize,
+                CURLOPT_HTTPHEADER => [
+                    "Authorization: Bearer " . $this->accessToken,
+                    "Dropbox-API-Arg: " . $args,
+                    "Content-Type: application/octet-stream"
+                ]
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            
+            fclose($fileHandle);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                throw new Exception("Upload failed. HTTP code: $httpCode, Error: $error, Response: " . $response);
+            }
+
+            $result = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception("Invalid JSON response: " . json_last_error_msg());
+            }
+
+            return [
+                'id' => $result['id'],
+                'name' => $result['name'],
+                'size' => $result['size'],
+                'path' => $result['path_display']
+            ];
+    }
+    
+    private function complexUpload(string $fileName, string $filePath, callable $progressCallback = null): array 
+    {
+        $fileSize = filesize($filePath);
+        $chunkSize = 60 * 1024 * 1024; 
+        $numChunks = ceil($fileSize / $chunkSize);
+        $uploaded = 0;
+        $sessionId = null;
+
+        $fp = fopen($filePath, 'rb');
+        if (!$fp) {
+            throw new Exception("Could not open file for reading: $filePath");
+        }
+
+        try {
+            for ($i = 0; $i < $numChunks; $i++) {
+                $start = $i * $chunkSize;
+                $end = min($start + $chunkSize, $fileSize) - 1;
+                $length = $end - $start + 1;
+
+                fseek($fp, $start);
+                $chunk = fread($fp, $length);
+
+                if ($i === 0) {
+                    $ch = curl_init($this->contentUrl . '/files/upload_session/start');
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_POST => true,
+                        CURLOPT_POSTFIELDS => $chunk,
+                        CURLOPT_HTTPHEADER => [
+                            "Authorization: Bearer " . $this->accessToken,
+                            "Dropbox-API-Arg: " . json_encode(["close" => false]),
+                            "Content-Type: application/octet-stream"
+                        ]
+                    ]);
+
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode !== 200) {
+                        throw new Exception("Upload session start failed: HTTP $httpCode - $response");
+                    }
+
+                    $result = json_decode($response, true);
+                    $sessionId = $result['session_id'];
+
+                } else {
+                    $args = json_encode([
+                        "cursor" => [
+                            "session_id" => $sessionId,
+                            "offset" => $start
+                        ],
+                        "close" => false
+                    ]);
+
+                    $ch = curl_init($this->contentUrl . '/files/upload_session/append_v2');
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_POST => true,
+                        CURLOPT_POSTFIELDS => $chunk,
+                        CURLOPT_HTTPHEADER => [
+                            "Authorization: Bearer " . $this->accessToken,
+                            "Dropbox-API-Arg: " . $args,
+                            "Content-Type: application/octet-stream"
+                        ]
+                    ]);
+
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode !== 200) {
+                        throw new Exception("Chunk upload failed: HTTP $httpCode - $response");
+                    }
+                }
+
+                $uploaded += $length;
+
+                if ($progressCallback) {
+                    $progressCallback([
+                        'progress_percentage' => round(($uploaded / $fileSize) * 100, 2),
+                        'uploaded_bytes' => $uploaded,
+                        'total_bytes' => $fileSize,
+                        'status' => ($uploaded >= $fileSize) ? 'completed' : 'uploading'
+                    ]);
+                }
+            }
+
+            $args = json_encode([
+                "cursor" => [
+                    "session_id" => $sessionId,
+                    "offset" => $uploaded
+                ],
+                "commit" => [
+                    "path" => $fileName,
+                    "mode" => "add",
+                    "autorename" => true,
+                    "mute" => false
+                ]
+            ]);
+
+            $ch = curl_init($this->contentUrl . '/files/upload_session/finish');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => "",
+                CURLOPT_HTTPHEADER => [
+                    "Authorization: Bearer " . $this->accessToken,
+                    "Dropbox-API-Arg: " . $args,
+                    "Content-Type: application/octet-stream"
+                ]
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                throw new Exception("Upload finish failed: HTTP $httpCode - $response");
+            }
+
+            $finalResult = json_decode($response, true);
+            fclose($fp);
+
+            return [
+                'id' => $finalResult['id'],
+                'name' => $finalResult['name'],
+                'size' => $finalResult['size'],
+                'mime_type' => $finalResult['.tag'] ?? 'application/octet-stream'
+            ];
+
+        } catch (Exception $e) {
+            fclose($fp);
+            throw $e;
+        }
     }
     
     public function downloadFile(string $fileId, string $savePath = null, callable $progressCallback = null): string 
     {
-        $args = json_encode(["path" => $fileId]);
-        
-        if ($savePath === null) {
-            $savePath = sys_get_temp_dir() . '/dropbox_' . basename($fileId);
+        $decodedFileId = urldecode($fileId);
+
+        try {
+            $metadata = $this->makeApiRequest('/files/get_metadata', 'POST', ['path' => $decodedFileId]);
+            $originalFileName = $metadata['name'];
+            $fileSize = $metadata['size'];
+        } catch (Exception $e) {
+            throw new Exception("Failed to get file metadata: " . $e->getMessage());
         }
-        
+
+        if ($savePath === null) {
+            $extension = pathinfo($originalFileName, PATHINFO_EXTENSION);
+            $baseName = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($originalFileName, PATHINFO_FILENAME));
+            $savePath = sys_get_temp_dir() . 
+                    DIRECTORY_SEPARATOR . 
+                    'download_' . 
+                    preg_replace('/[^a-zA-Z0-9_-]/', '_', $decodedFileId) . 
+                    '_' . $baseName .
+                    ($extension ? '.' . $extension : '');
+        }
+
+        $saveDir = dirname($savePath);
+        if (!is_dir($saveDir)) {
+            mkdir($saveDir, 0777, true);
+        }
+
         $fp = fopen($savePath, 'wb');
         if (!$fp) {
             throw new Exception("Could not open file for writing: $savePath");
         }
-        
-        $ch = curl_init($this->contentUrl . '/files/download');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "Authorization: Bearer " . $this->accessToken,
-            "Dropbox-API-Arg: " . $args
-        ]);
-        curl_setopt($ch, CURLOPT_FILE, $fp);
-        curl_setopt($ch, CURLOPT_NOPROGRESS, false);
-        curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($ch, $downloadTotal, $downloaded) use ($progressCallback) {
-            if ($progressCallback && $downloadTotal > 0) {
-                $progressCallback([
-                    'progress_percentage' => ($downloaded / $downloadTotal) * 100,
-                    'downloaded_bytes' => $downloaded,
-                    'total_bytes' => $downloadTotal,
-                    'status' => $downloaded >= $downloadTotal ? 'completed' : 'downloading'
-                ]);
+
+        try {
+            $ch = curl_init($this->contentUrl . '/files/download');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FILE => $fp,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_HTTPHEADER => [
+                    "Authorization: Bearer " . $this->accessToken,
+                    "Dropbox-API-Arg: " . json_encode(["path" => $decodedFileId])
+                ],
+                CURLOPT_NOPROGRESS => false,
+                CURLOPT_PROGRESSFUNCTION => function($ch, $downloadTotal, $downloaded) use ($progressCallback, $fileSize) {
+                    if ($progressCallback) {
+                        $progressCallback([
+                            'progress_percentage' => ($downloaded / $fileSize) * 100,
+                            'downloaded_bytes' => $downloaded,
+                            'total_bytes' => $fileSize,
+                            'status' => $downloaded >= $fileSize ? 'completed' : 'downloading'
+                        ]);
+                    }
+                }
+            ]);
+
+            $success = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if (!$success || $httpCode !== 200) {
+                throw new Exception("Download failed: " . ($error ?: "HTTP $httpCode"));
             }
-        });
-        
-        $success = curl_exec($ch);
-        curl_close($ch);
-        fclose($fp);
-        
-        if (!$success) {
-            throw new Exception('Download failed');
+
+            $downloadedSize = filesize($savePath);
+            if ($downloadedSize !== $fileSize) {
+                throw new Exception("Downloaded file size ($downloadedSize) does not match expected size ($fileSize)");
+            }
+
+            return $savePath;
+
+        } catch (Exception $e) {
+            fclose($fp);
+            if (file_exists($savePath)) {
+                unlink($savePath);
+            }
+            throw $e;
         }
-        
-        return $savePath;
     }
     
     public function deleteFile(string $fileId): bool 
@@ -340,7 +449,7 @@ class DropboxProvider implements CloudProviderInterface
         ];
     }
 
-    public function getAllFiles(int $limit)
+    public function getAllFiles(int $limit):array
     {
         $files = [];
         $cursor = null;
@@ -370,13 +479,13 @@ class DropboxProvider implements CloudProviderInterface
                 }
 
                 $files[] = [
-                    'id' => $entry['path_display'],
+                    'id' => $entry['id'],
                     'name' => $entry['name'],
                     'size' => $entry['size'],
                     'mimeType' => $entry['.tag'],
                     'createdTime' => $entry['client_modified'],
                     'modifiedTime' => $entry['server_modified'],
-                    'parents' => [dirname($entry['path_display'])]
+                    'parents' => [dirname($entry['name'])]
                 ];
 
                 if (count($files) >= $limit) {
@@ -412,11 +521,27 @@ class DropboxProvider implements CloudProviderInterface
     {
         $response = $this->makeApiRequest('/users/get_current_account', 'POST');
         
+        $photoUrl = null;
+        if (isset($response['profile_photo_url'])) {
+            try {
+                $ch = curl_init($response['profile_photo_url']);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                $photoData = curl_exec($ch);
+                curl_close($ch);
+                
+                if ($photoData) {
+                    $photoUrl = 'data:image/jpeg;base64,' . base64_encode($photoData);
+                }
+            } catch (Exception $e) {
+                $photoUrl = null;
+            }
+        }
+        
         return [
             'id' => $response['account_id'],
             'email' => $response['email'],
             'name' => $response['name']['display_name'],
-            'picture' => $response['profile_photo_url'] ?? null,
+            'picture' => $photoUrl,
             'verified_email' => $response['email_verified']
         ];
     }
