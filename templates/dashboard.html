@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="{{base_url}}">
+    <title>{{page_title}}</title>
+    
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Top Navigation -->
+        <div class="dashboard-header">
+            <div class="row">
+                <div class="col-sm-12 col-md-12">
+                    <h1>nor.ust</h1>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-12 col-md-6 user-button">
+                    <button type="button" class="nav-btn" id="profile-btn">
+                        {{username}}
+                    </button>
+                </div>
+                <div class="col-sm-12 col-md-6" id="settings-container">
+                    <!--<button type="button" class="nav-btn" id="settings-btn">
+                        Settings
+                    </button>-->
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content - File Explorer -->
+        <div class="dashboard-main">
+            <div class="file-explorer">
+                <!-- Breadcrumb Navigation with Action Buttons -->
+                <div class="breadcrumb">
+                    <div class="breadcrumb-content">
+                        <div class="breadcrumb-path" id="breadcrumb-path">
+                            {{breadcrumb_html}}
+                        </div>
+                        <div class="breadcrumb-actions">
+                            <button type="button" class="action-btn" id="upload-btn">
+                                📤 Upload
+                            </button>
+                            <button type="button" class="action-btn" id="new-folder-btn">
+                                📁 New Folder
+                            </button>
+                            <button type="button" class="action-btn" id="download-btn" disabled>
+                                📥 Download
+                            </button>
+                            <button type="button" class="action-btn" id="rename-btn" disabled>
+                                ✏️ Rename
+                            </button>
+                            <button type="button" class="action-btn" id="delete-btn" disabled>
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File List Container -->
+                <div class="file-list-container">
+                    <div class="file-list" id="file-list">
+                        {{file_list}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container (Bottom Left) -->
+    <div id="toast-container" class="toast-container">
+        <!-- Toasts will be dynamically added here -->
+    </div>
+
+    <!-- Hidden file input for uploads -->
+    <input type="file" id="file-input" multiple style="display: none;">
+
+    <!-- Modal for rename dialog -->
+    <div id="rename-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Rename Item</h3>
+            <input type="text" id="rename-input" placeholder="Enter new name">
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="rename-cancel">Cancel</button>
+                <button type="button" class="btn-primary" id="rename-confirm">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for new folder dialog -->
+    <div id="new-folder-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Create New Folder</h3>
+            <input type="text" id="folder-name-input" placeholder="Enter folder name">
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" id="folder-cancel">Cancel</button>
+                <button type="button" class="btn-primary" id="folder-confirm">Create</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Pass data to JavaScript
+        window.dashboardData = {
+            currentPath: '{{current_path}}',
+            baseUrl: '{{base_url}}',
+            fileCount: {{file_count}},
+            storageUsed: '{{storage_used}}',
+            storageLimit: '{{storage_limit}}',
+            storagePercent: {{storage_percent}}
+        };
+    </script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

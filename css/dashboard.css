@@ -1,0 +1,794 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Ubuntu', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #2d3748;
+    line-height: 1.6;
+}
+
+.dashboard-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.dashboard-header {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    padding: 1.25rem; /* 20px converted to rem */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dashboard-header .row {
+    align-items: center;
+}
+
+.dashboard-header h1 {
+    font-family: 'Smooth Circulars', 'Ubuntu', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 400;
+    color: white;
+    margin: 0;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 0.75rem 1.25rem; /* 12px 20px converted to rem */
+    border-radius: 0.5rem; /* 8px converted to rem */
+    font-family: 'Ubuntu', sans-serif;
+    font-size: 0.875rem; /* 14px converted to rem */
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.dashboard-main {
+    padding: 1.875rem 1.25rem; /* 30px 20px */
+    min-height: calc(100vh - 8.75rem); /* Fill remaining screen height */
+    display: flex;
+    flex-direction: column;
+}
+
+.file-explorer {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 0.625rem 1.875rem rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    max-width: 75rem; /* 1200px */
+    width: 100%; /* Make sure it takes full width */
+    margin: 0 auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 12rem); /* Fixed height for scrolling */
+}
+
+.breadcrumb {
+    background: #f8fafc;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0; /* Don't shrink breadcrumb */
+}
+
+.breadcrumb-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.breadcrumb-path {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.breadcrumb-item {
+    color: #718096;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.breadcrumb-item.active {
+    color: #2d3748;
+    background: #e2e8f0;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.breadcrumb-item.clickable {
+    cursor: pointer;
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+}
+
+.breadcrumb-item.clickable:hover {
+    color: #4299e1;
+    background: #bee3f8;
+}
+
+.breadcrumb-separator {
+    color: #cbd5e0;
+    font-size: 0.75rem;
+    margin: 0 0.25rem;
+    user-select: none;
+}
+
+.breadcrumb-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.action-btn {
+    background: #4299e1;
+    border: 1px solid #3182ce;
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-family: 'Ubuntu', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.action-btn:hover:not(:disabled) {
+    background: #3182ce;
+}
+
+.action-btn:disabled {
+    background: #cbd5e0;
+    border-color: #a0aec0;
+    color: #718096;
+    cursor: not-allowed;
+}
+
+.file-list-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 25rem; 
+    max-height: calc(100vh - 18rem);
+}
+
+.file-list {
+    padding: 0;
+    display: block;
+    min-height: 100%; 
+}
+
+.empty-folder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: #718096;
+    min-height: 20rem;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.6;
+}
+
+.empty-folder p {
+    margin: 0.5rem 0;
+    font-size: 1rem;
+}
+
+.empty-hint {
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
+.file-item {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0;
+    text-align: left;
+    cursor: pointer;
+    border: none;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: relative;
+}
+
+.file-item:hover {
+    background: #f8fafc;
+}
+
+.file-item.selected {
+    background: #ebf8ff;
+}
+
+.file-item.uploading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.file-item.uploading .file-name {
+    font-style: italic;
+}
+
+.file-item.uploading .file-name::after {
+    content: " (uploading...)";
+    color: #718096;
+    font-style: italic;
+}
+
+.file-select {
+    flex-shrink: 0;
+}
+
+.file-checkbox {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #cbd5e0;
+    border-radius: 0.25rem;
+    background: white;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.file-checkbox:checked {
+    background: #4299e1;
+    border-color: #3182ce;
+}
+
+.file-checkbox:checked::before {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.file-checkbox:hover {
+    border-color: #4299e1;
+}
+
+.file-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.file-details {
+    flex-grow: 1;
+    min-width: 0; 
+}
+
+.file-name {
+    font-size: 0.875rem;
+    color: #2d3748;
+    word-break: break-word;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.file-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: #718096;
+}
+
+.file-size {
+    flex-shrink: 0;
+}
+
+.file-date {
+    flex-shrink: 0;
+}
+
+.toast-container {
+    position: fixed;
+    bottom: 1.25rem;
+    left: 1.25rem;
+    z-index: 9999;
+    max-width: 25rem;
+    pointer-events: none;
+}
+
+.toast {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15);
+    margin-bottom: 0.625rem;
+    padding: 1rem;
+    border-left: 0.25rem solid;
+    pointer-events: auto;
+    position: relative;
+    max-width: 100%;
+    word-wrap: break-word;
+}
+
+.toast.error {
+    border-left-color: #dc3545;
+    background: #fff5f5;
+}
+
+.toast.success {
+    border-left-color: #28a745;
+    background: #f0fff4;
+}
+
+.toast.warning {
+    border-left-color: #ffc107;
+    background: #fffbf0;
+}
+
+.toast.info {
+    border-left-color: #17a2b8;
+    background: #f0f9ff;
+}
+
+.toast.upload {
+    border-left-color: #4299e1;
+    background: #f0f9ff;
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.upload-progress-container {
+    margin-top: 0.75rem;
+}
+
+.upload-progress-bar {
+    width: 100%;
+    height: 0.5rem;
+    background: #e2e8f0;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 0.5rem;
+}
+
+.upload-progress-fill {
+    height: 100%;
+    background: #4299e1;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.upload-progress-text {
+    text-align: right;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 0.25rem;
+}
+
+.upload-status {
+    font-size: 0.75rem;
+    color: #718096;
+    margin-bottom: 0.5rem;
+}
+
+.upload-file-list {
+    font-size: 0.75rem;
+    color: #4a5568;
+    max-height: 4rem;
+    overflow-y: auto;
+}
+
+.upload-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.125rem 0;
+}
+
+.upload-file-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 0.5rem;
+}
+
+.upload-file-status {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    color: #718096;
+}
+
+.toast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    font-size: 1.125rem;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 0.625rem;
+    opacity: 0.7;
+    color: inherit;
+    font-family: inherit;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+.toast-message {
+    margin: 0;
+    line-height: 1.4;
+    font-size: 0.875rem;
+}
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    max-width: 25rem;
+    width: 90%;
+    box-shadow: 0 0.625rem 1.875rem rgba(0, 0, 0, 0.15);
+}
+
+.modal-content h3 {
+    margin: 0 0 1rem 0;
+    color: #2d3748;
+    font-size: 1.125rem;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    font-family: 'Ubuntu', sans-serif;
+}
+
+.modal-content input:focus {
+    outline: none;
+    border-color: #4299e1;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.btn-primary {
+    background: #4299e1;
+    border: 1px solid #3182ce;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-family: 'Ubuntu', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background: #3182ce;
+}
+
+.btn-secondary {
+    background: #e2e8f0;
+    border: 1px solid #cbd5e0;
+    color: #4a5568;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-family: 'Ubuntu', sans-serif;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: #cbd5e0;
+}
+
+.progress-container {
+    margin-bottom: 1rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 0.5rem;
+    background: #e2e8f0;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #4299e1;
+    width: 0%;
+}
+
+.progress-text {
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-top: 0.5rem;
+}
+
+.upload-status {
+    font-size: 0.75rem;
+    color: #718096;
+    text-align: center;
+}
+
+.toast.download {
+    border-left-color: #28a745;
+    background: #f0fff4;
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.download-file-name {
+    font-weight: 600;
+    color: #2d3748;
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.download-file-size {
+    font-size: 0.75rem;
+    color: #718096;
+    margin-bottom: 0.5rem;
+}
+
+.download-status {
+    font-size: 0.75rem;
+    color: #718096;
+    margin-bottom: 0.5rem;
+}
+
+.download-progress-container {
+    margin-top: 0.75rem;
+}
+
+.download-progress-bar {
+    width: 100%;
+    height: 0.5rem;
+    background: #e2e8f0;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 0.5rem;
+}
+
+.download-progress-fill {
+    height: 100%;
+    background: #28a745;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.download-progress-text {
+    text-align: right;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 0.25rem;
+}
+
+@media (max-width: 47.99em) {
+    .toast.download {
+        min-width: auto;
+        max-width: none;
+    }
+    
+    .download-file-name {
+        font-size: 0.8125rem;
+    }
+}
+
+@media (min-width: 48em) {
+    .dashboard-header h1 {
+        text-align: left;
+    }
+    
+    .user-button {
+        text-align: left;
+    }
+    
+    #settings-container {
+        text-align: right;
+    }
+}
+
+@media (max-width: 47.99em) {
+    .dashboard-header {
+        padding: 1rem; 
+    }
+    
+    .dashboard-header h1 {
+        font-size: 1.5rem;
+        text-align: left;
+    }
+    
+    .nav-btn {
+        padding: 0.625rem 1rem; 
+        font-size: 0.8125rem; 
+    }
+    
+    .user-button {
+        text-align: left;
+        padding: 0.5rem 0; 
+    }
+    
+    #settings-container {
+        text-align: left;
+        padding: 0.5rem 0;
+    }
+    
+    .dashboard-main {
+        padding: 1.25rem 0.75rem;
+        min-height: calc(100vh - 10rem);
+    }
+    
+    .file-explorer {
+        height: calc(100vh - 14rem); 
+    }
+    
+    .file-meta {
+        display: none;
+    }
+    
+    .file-item {
+        padding: 0.75rem 1rem;
+        gap: 0.75rem;
+    }
+    
+    .file-checkbox {
+        width: 1.125rem; 
+        height: 1.125rem;
+    }
+    
+    .breadcrumb {
+        padding: 0.75rem 1rem;
+    }
+    
+    .breadcrumb-content {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    
+    .breadcrumb-path {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .breadcrumb-actions {
+        align-self: stretch;
+        justify-content: space-between;
+    }
+    
+    .action-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 0.625rem 0.5rem;
+        font-size: 0.8125rem;
+    }
+    
+    .toast-container {
+        bottom: 1rem;
+        left: 1rem;
+        right: 1rem;
+        max-width: none;
+    }
+    
+    .toast {
+        margin-bottom: 0.5rem;
+    }
+}
+
+@media (max-width: 30em) {
+    .dashboard-main {
+        min-height: calc(100vh - 13.75rem); 
+    }
+    
+    .file-explorer {
+        height: calc(100vh - 16rem); 
+    }
+    
+    .file-checkbox {
+        width: 1.25rem; 
+        height: 1.25rem;
+    }
+    
+    .breadcrumb-path {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .breadcrumb-separator {
+        display: none;
+    }
+    
+    .breadcrumb-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .action-btn {
+        width: 100%;
+    }
+    
+    .modal-content {
+        max-width: none;
+        width: 95%;
+        margin: 1rem;
+    }
+}
+
+.uploading-label {
+    color: #4299e1;
+    font-style: italic;
+    margin-left: 8px;
+    font-size: 0.85em;
+    vertical-align: middle;
+}
+
+.uploaded-label {
+    color: #38a169;
+    font-weight: bold;
+    margin-left: 8px;
+    font-size: 0.85em;
+    vertical-align: middle;
+}
