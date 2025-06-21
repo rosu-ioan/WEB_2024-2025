@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="{{base_url}}">
+    <title>{{page_title}}</title>
+    
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/profile.css">
+</head>
+<body>
+    <div class="profile-container">
+        <!-- Header Section -->
+        <div class="profile-header">
+            <div class="row">
+                <div class="col-sm-12 col-md-8">
+                    <h1>nor.ust</h1>
+                    <p class="profile-subtitle">Manage your cloud storage connections</p>
+                </div>
+                <div class="col-sm-12 col-md-4">
+                    <div class="user-section">
+                        <span class="username">{{username}}</span>
+                        <button type="button" class="btn btn-secondary" id="logout-btn">
+                            Logout
+                        </button>
+                        <button type="button" class="btn btn-primary" id="dashboard-btn">
+                            Dashboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        <div class="profile-alerts" id="alerts">
+            {{alerts_html}}
+        </div>
+
+        <!-- Main Content -->
+        <div class="profile-main">
+            <!-- Storage Overview Section -->
+            <div class="storage-overview">
+                <h2>Total Storage Overview</h2>
+                <div class="storage-summary">
+                    <div class="storage-info">
+                        <span class="storage-used">{{total_storage_used}}</span>
+                        <span class="storage-separator">of</span>
+                        <span class="storage-total">{{total_storage_available}}</span>
+                    </div>
+                    <div class="storage-bar">
+                        <div class="storage-progress" style="width: {{storage_percentage}}%"></div>
+                    </div>
+                    <div class="storage-percentage">{{storage_percentage}}% used</div>
+                </div>
+            </div>
+
+            <!-- Connected Providers Section -->
+            <div class="providers-section">
+                <div class="section-header">
+                    <h2>Connected Cloud Providers</h2>
+                    <p class="section-subtitle">Manage your storage priority and connections</p>
+                </div>
+
+                <div class="connected-providers" id="connected-providers">
+                    {{connected_providers_html}}
+                </div>
+            </div>
+
+            <!-- Available Providers Section -->
+            <div class="providers-section">
+                <div class="section-header">
+                    <h2>Available Providers</h2>
+                    <p class="section-subtitle">Connect to additional cloud storage services</p>
+                </div>
+
+                <div class="unconnected-providers" id="unconnected-providers">
+                    {{unconnected_providers_html}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container (Bottom Left) -->
+    <div id="toast-container" class="toast-container">
+        <!-- Toasts will be dynamically added here -->
+    </div>
+
+    <script>
+        // Pass data to JavaScript
+        window.profileData = {
+            baseUrl: '{{base_url}}',
+            connectedCount: {{connected_count}},
+            totalProviders: {{total_providers}}
+        };
+    </script>
+    <script src="js/profile.js"></script>
+</body>
+</html>
