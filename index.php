@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/utils/autoload.php';
 
+session_start();
+
 define('APP_DEBUG', true);
 
 $isApiRequest = false;
