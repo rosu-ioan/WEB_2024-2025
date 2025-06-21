@@ -95,4 +95,25 @@ CREATE TABLE upload_sessions (
     CONSTRAINT fk_sessions_directory FOREIGN KEY (directory_id) REFERENCES directories(directory_id)
 );
 
+ALTER TABLE user_cloud_accounts 
+ADD COLUMN priority_rank INT NOT NULL DEFAULT 1;
+
+
+ALTER TABLE files 
+ADD COLUMN uploaded TINYINT(1) DEFAULT 0 NOT NULL;
+
+ALTER TABLE cloud_providers 
+DROP COLUMN api_base_url,
+ADD COLUMN provider_class VARCHAR(100) NOT NULL;
+
+INSERT INTO cloud_providers (provider_name, provider_class) VALUES
+('Google Drive', 'GoogleDriveProvider'),
+('Microsoft OneDrive', 'MicrosoftOneDriveProvider'),
+('Dropbox', 'DropboxProvider');
+
+
+ALTER TABLE file_chunks 
+ADD CONSTRAINT fk_chunks_file 
+FOREIGN KEY (file_id) REFERENCES files(file_id) 
+ON DELETE CASCADE;
 
