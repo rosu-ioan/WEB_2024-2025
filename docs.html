@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <title id="doc-title">Documentatie proiect nor.ust (Universal Storage Tool)</title>
+  <meta name="author" content="Rosu Ioan">
+  <meta name="author" content="Antoniev Valeriu Gabriel">
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 2em; background: #f9f9f9; color: #222; }
+    h1, h2, h3 { color: #2a5db0; }
+    code, pre { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }
+    section { margin-bottom: 2em; }
+    ul, ol { margin-left: 2em; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+    th, td { border: 1px solid #bbb; padding: 0.5em; }
+    th { background: #e6e6e6; }
+    .ref { font-size: 0.95em; color: #555; }
+  </style>
+</head>
+<body>
+<article id="main-article">
+  <header>
+    <h1 id="titlu">Documentatie proiect nor.ust (Universal Storage Tool)</h1>
+    <p><strong>Autori:</strong> Rosu Ioan, Antoniev Valeriu Gabriel</p>
+  </header>
+
+  <section id="introducere">
+    <h2>Introducere</h2>
+    <p>
+        <strong>Nor.ust</strong> reprezinta o aplicatie de tipul Universal Storage Tool ce isi propune sa abstractizeze lucrul cu mai 
+        multi provideri de servicii cloud, astfel incat utilizatorul sa aiba o interfata comuna pentru a-si incarca/descarca fisierele 
+        fara sa interactioneze direct cu fiecare provider in parte.
+
+    </p>
+  </section>
+
+  <section id="cerinte">
+    <h2>Cerintele principale si interactiunea cu utilizatorul</h2>
+    <section id="functionalitati">
+      <h3>Functionalitati</h3>
+      <ul>
+        <li>Inregistrare si autentificare folosind JWT</li>
+        <li>Vizualizare, incarcare, descarcare, redenumire si stergere fisiere si foldere</li>
+        <li>Conectare si deconectare conturi cloud externe</li>
+        <li>Setarea prioritatilor pentru serviciile cloud externe</li>
+        <li>Vizualizare spatiu de stocare folosit si disponibil pe fiecare provider</li>
+        <li>Download multiplu cu arhivare ZIP</li>
+        <li>Upload in baza de date a fisierelor mici pentru descarcare rapida</li>
+        <li>Upload pe mai multi provideri si reconstruire pentru maximizarea utilizarii spatiului</li>
+      </ul>
+    </section>
+    <section id="interactiune-utilizator">
+      <h3>Interactiunea cu utilizatorul</h3>
+      <ul>
+        <li>Interfata tip file-explorer, cu butoane pentru actiuni principale</li>
+        <li>Actiuni declansate prin click, cu confirmari si mesaje de eroare/succes</li>
+        <li>Selectarea mai multor fisiere</li>
+        <li>Navigarea prin structura de directoare</li>
+        <li>Conectare la cloud prin OAuth, cu redirect automat si feedback</li>
+        <li>Progres upload/download</li>
+        <li>Design responsive</li>
+        <li>Construirea paginii client-side pentru operatii comune pentru a evita refresh-ul paginii</li>
+      </ul>
+    </section>
+  </section>
+
+  <section id="design-ui">
+    <h2>Interfata utilizator</h2>
+    <p>Am ales sa pastram un design minimalist pentru a face aplicatia usor de inteles si folosit.</p>
+        <h3>Culori si fonturi</h3>
+        <ul>
+            <li>Interfata foloseste un font stilizat diferit in functie de caz pentru a oferi uniformitate.</li>
+            <li>Culorile de asemenea sunt simple si ofera un contrast puternic pentru a intelege usor elementele cu care se face interactiunea.</li>
+            <li>Background-ul este un gradient pentru a pastra design-ul simplu dar placut.</li>
+        </ul>
+
+        <h3>Elemente UI</h3>
+        <p>Operatiile se fac dintr-o interfata similara cu File Explorer, o interfata familiara pentru majoritatea utilizatorilor. 
+            Elementele vizuale cu care se interactioneaza(butoanele de upload/download/redenumie etc.) sunt mereu vizibile dar colorate 
+            diferit daca aceastea pot fi apasate sau nu, astfel oferind feedback imediat utilizatorului. Toate fisierele au un checkbox 
+            pentru a intelege imediat ca acestea pot fi selectate si modificate impreuna. 
+        </p>
+        <p>Dupa majoritatea operatiilor utilizatorul primeste o notificare de tip toast(pop-up) pentru a confirma succesul sau esecul respectivei operatii.</p>
+  </section>
+
+  <section id="arhitectura">
+    <h2>Arhitectura aplicatiei</h2>
+    <section id="backend">
+      <h3>Backend</h3>
+      <ul>
+        <li>Arhitectura <strong>MVC</strong> (Model-View-Controller) pentru separarea clara a logicii, prezentarii si datelor.</li>
+        <li>Modelele gestioneaza accesul la baza de date si logica de business.</li>
+        <li>Controllerele primesc cereri HTTP si apeleaza modelele si view-urile corespunzatoare.</li>
+        <li>Codul html este templetizat.</li>
+        <li>View-urile populeaza template-urile cu date si le returnate utilizatorului.</li>
+        <li>View-urile returneaza si json in functie de tipul cererii.</li>
+        <li>Integrare cu API-uri externe (Google Drive, Microsoft OneDrive, Dropbox) pentru stocare cloud.</li>
+        <li>Providerii sunt alesi dinamic din baza de date.</li>
+        <li>Providerii implementeaza o interfata cu operatiile generice pentru a facilita adaugarea unui nou provider.</li>
+        <li>Autentificare cu JWT pentru siguranta si persistenta.</li>
+        <li>Fisierele sunt incarcate in chunk-uri si asamblate pe server, apoi urcate in cloud.</li>
+        <li>Downloadul se face chunked, cu suport pentru arhivare ZIP la download multiplu.</li>
+      </ul>
+    </section>
+    <section id="frontend">
+      <h3>Frontend</h3>
+      <ul>
+        <li>Interfata dinamica folosind <strong>JavaScript</strong></li>
+        <li>Toate operatiile importante sunt realizate prin AJAX pentru o experienta fluida.</li>
+        <li>Validare in timp real a formularelor si feedback instant pentru utilizator.</li>
+        <li>Pagina este construita de backend doar pentru prima incarcare, dupa este modificate de JS.</li>
+      </ul>
+    </section>
+
+    <section id="structura-foldere">
+      <h3>Structura foldere</h3>
+      <pre>
+controllers/   # logica de control
+models/        # acces date si logica business
+views/         # generare HTML
+templates/     # sabloane HTML
+js/            # functionalitati frontend
+css/           # stilizare
+utils/         # clase utilitare si integrari API
+credentials/   # fisiere de configurare (exclus din git)
+resources/     # scripturi SQL, alte resurse
+vendor/        # dependinte Composer
+      </pre>
+    </section>
+  </section>
+
+
+  <section id="resurse-date">
+    <h2>Resurse externe si provenienta datelor</h2>
+    <ul>
+      <li id="resurse-fonturi">
+        <strong>Fonturi:</strong>
+        Smooth Circulars(<a href="https://www.dafont.com/smooth-circulars.font">https://www.dafont.com/smooth-circulars.font</a>),
+        Ubuntu(<a href="https://fonts.google.com/specimen/Ubuntu?query=ubuntu">https://fonts.google.com/specimen/Ubuntu?query=ubuntu</a>)
+      </li>
+      <li id="resurse-apiuri"><strong>API-uri cloud:</strong>
+        <ul>
+          <li id="api-google">Google Drive API (<a href="https://developers.google.com/drive">developers.google.com/drive</a>)</li>
+          <li id="api-ms">Microsoft Graph API pentru OneDrive (<a href="https://docs.microsoft.com/en-us/graph/onedrive-concept-overview">docs.microsoft.com</a>)</li>
+          <li id="api-dropbox">Dropbox API (<a href="https://www.dropbox.com/developers/documentation">dropbox.com/developers</a>)</li>
+        </ul>
+      </li>
+      <li id="resurse-lib"><strong>Biblioteci JS/PHP:</strong>vlucas/phpdotenv, league/oauth2-client, Google API Client, TheNetworg OAuth2 Client, firebase/php-jwt</li>
+      <li id="resurse-imagini">Nu am folosit imagini sau date care nu ne apartin.
+      <li id="resurse-date-user"><strong>Datele utilizatorilor</strong> sunt generate de utilizatori sau provin din API-urile cloud conectate.</li>
+    </ul>
+  </section>
+
+  <section id="concluzii">
+    <h2>Concluzii</h2>
+    <p>
+      Proiectul nor.ust a fost dezvoltat cu accent pe modularitate, securitate si experienta utilizatorului. Am integrat servicii cloud populare si am pus accent pe un design curat si intuitiv. Toate deciziile de design si arhitectura au avut ca scop usurinta in utilizare si mentenanta.
+    </p>
+  </section>
+
+  <section id="referinte">
+    <h2>Referinte</h2>
+    <ol>
+      <li class="ref">Google Drive API: <a href="https://developers.google.com/drive">https://developers.google.com/drive</a></li>
+      <li class="ref">Microsoft Graph API: <a href="https://docs.microsoft.com/en-us/graph/onedrive-concept-overview">https://docs.microsoft.com/en-us/graph/onedrive-concept-overview</a></li>
+      <li class="ref">Dropbox API: <a href="https://www.dropbox.com/developers/documentation">https://www.dropbox.com/developers/documentation</a></li>
+      <li class="ref">vlucas/phpdotenv: <a href="https://github.com/vlucas/phpdotenv">https://github.com/vlucas/phpdotenv</a></li>
+      <li class="ref">league/oauth2-client: <a href="https://oauth2-client.thephpleague.com/">https://oauth2-client.thephpleague.com/</a></li>
+      <li class="ref">firebase/php-jwt: <a href="https://github.com/firebase/php-jwt">https://github.com/firebase/php-jwt</a></li>
+      <li class="ref">TheNetworg OAuth2 Client: <a href="https://github.com/TheNetworg/oauth2-azure">https://github.com/TheNetworg/oauth2-azure</a></li>
+      <li class="ref">Scholarly HTML Official: <a href="https://w3c.github.io/scholarly-html/">https://w3c.github.io/scholarly-html/</a></li>
+      <li class="ref">Smooth Circulars: <a href="https://www.dafont.com/smooth-circulars.font">https://www.dafont.com/smooth-circulars.font</a></li>
+      <li class="ref">Ubuntu: <a href="https://fonts.google.com/specimen/Ubuntu?query=ubuntu">https://fonts.google.com/specimen/Ubuntu?query=ubuntu</a></li>
+    </ol>
+  </section>
+</article>
+</body>
+</html>

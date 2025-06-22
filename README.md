@@ -1,0 +1,1 @@
+Link video prezentare: https://www.youtube.com/watch?v=6iYRq426pbw
